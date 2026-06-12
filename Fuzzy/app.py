@@ -330,7 +330,8 @@ with tab_mf:
 
     with r2c2:
         fig = plot_mf("Output — Risiko Diabetes", (0, 10),
-                      [(mf_tidak,"TIDAK"),(mf_mungkin,"MUNGKIN"),(mf_iya,"IYA")])
+              [(mf_tidak,"TIDAK"),(mf_mungkin,"MUNGKIN"),(mf_iya,"IYA")],
+              vline=d["skor_m"])
         st.pyplot(fig, use_container_width=True); plt.close(fig)
 
     st.divider()
