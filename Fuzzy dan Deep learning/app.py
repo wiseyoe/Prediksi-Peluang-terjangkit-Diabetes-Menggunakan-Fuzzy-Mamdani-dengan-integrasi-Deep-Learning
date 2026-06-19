@@ -11,7 +11,11 @@ import os, io
 
 from fuzzy_diabetes import (
     mf_bmi_kurus, mf_bmi_normal, mf_bmi_gemuk, mf_bmi_obesitas,
-    mf_bp_rendah, mf_bp_sedang, mf_bp_tinggi,
+    mf_bp_rendah, mf_bp_sedang, mf_bp_tinggi,    mf_umur_muda,
+    mf_umur_dewasa,
+    mf_umur_tua,
+    mf_sayur_jarang,
+    mf_sayur_sering,
     mf_chol_rendah, mf_chol_sedang, mf_chol_tinggi,
     mf_tidak, mf_mungkin, mf_iya,
     prediksi_pasien, prediksi_pasien_hybrid,
@@ -20,7 +24,7 @@ from fuzzy_diabetes import (
     skor_ke_label, scale_bp, scale_chol,
     preprocess, simpan_model_dl, load_model_dl,
     build_dl_model, DL_FEATURES, RULES, FN_MAP,
-    X_OUTPUT,
+    X_OUTPUT, train_deep_learning
 )
 
 # ── Page config ────────────────────────────────────────────────
@@ -111,7 +115,7 @@ def plot_sugeno(alphas, zs):
 
 
 # ── Session state ──────────────────────────────────────────────
-for k, v in [("dl_model", None), ("dl_scaler", None), ("hasil", None)]:
+for k, v in [("dl_model", None), ("dl_scaler", None)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -126,10 +130,13 @@ with st.sidebar:
     st.subheader("Filter Utama")
     bmi_val  = st.slider("BMI", 10.0, 70.0, 27.5, 0.5,
                           help="Body Mass Index pasien")
+    veggies = st.selectbox("Sayur", [1, 0], format_func=lambda x: "Tidak" if x == 0 else "Ya")
     highbp   = st.selectbox("Tekanan Darah Tinggi", [0, 1],
                              format_func=lambda x: "Tidak" if x == 0 else "Ya")
     highchol = st.selectbox("Kolesterol Tinggi", [0, 1],
                              format_func=lambda x: "Tidak" if x == 0 else "Ya")
+    age       = st.select_slider("Kel. Usia (1=18–24 … 13=80+)", list(range(1,14)), 7)
+    
 
     st.divider()
     st.subheader("Filter Tambahan")
@@ -142,7 +149,7 @@ with st.sidebar:
         phys_act  = st.selectbox("Aktif Fisik",[1,0], format_func=lambda x: "Ya" if x else "Tidak")
         fruits    = st.selectbox("Buah",       [1,0], format_func=lambda x: "Ya" if x else "Tidak")
     with col2:
-        veggies   = st.selectbox("Sayur",      [1,0], format_func=lambda x: "Ya" if x else "Tidak")
+
         heavy_alc = st.selectbox("Alkohol",    [0,1], format_func=lambda x: "Ya" if x else "Tidak")
         diff_walk = st.selectbox("Sulit Jalan",[0,1], format_func=lambda x: "Ya" if x else "Tidak")
         sex       = st.selectbox("Kelamin",    [0,1], format_func=lambda x: "P" if x==0 else "L")
@@ -150,12 +157,10 @@ with st.sidebar:
     gen_hlth  = st.select_slider("Kesehatan Umum (1=Baik–5=Buruk)", [1,2,3,4,5], 3)
     ment_hlth = st.slider("Hari Kes. Mental Buruk /30hr", 0, 30, 0)
     phys_hlth = st.slider("Hari Kes. Fisik Buruk /30hr",  0, 30, 0)
-    age       = st.select_slider("Kel. Usia (1=18–24 … 13=80+)", list(range(1,14)), 7)
     education = st.select_slider("Pendidikan (1–6)", [1,2,3,4,5,6], 4)
     income    = st.select_slider("Pendapatan (1–8)", list(range(1,9)), 5)
 
-    st.divider()
-    predict_btn = st.button("Kirim", use_container_width=True, type="primary")
+
 
 
 # ══════════════════════════════════════════════════════════════
@@ -179,49 +184,36 @@ tab_pred, tab_mf, tab_dl, tab_eval, tab_info = st.tabs([
 
 # ──────────────────────────────────────────────────────────────
 #  TAB 1 — PREDIKSI
+#  Fuzzy dihitung langsung setiap render sehingga hasil selalu
+#  sinkron dengan nilai sidebar tanpa perlu tombol Kirim.
 # ──────────────────────────────────────────────────────────────
 with tab_pred:
-    if predict_btn:
-        bp_s   = scale_bp(highbp)
-        chol_s = scale_chol(highchol)
+    bp_s   = scale_bp(highbp)
+    chol_s = scale_chol(highchol)
 
-        # Fuzzy
-        hasil_f = prediksi_pasien(bmi_val, highbp, highchol)
+    hasil_f = prediksi_pasien(bmi_val, highbp, highchol, age, veggies)
 
-        # Detail untuk plot
-        fuzz    = fuzzifikasi(bmi_val, bp_s, chol_s)
-        agregat = inferensi_mamdani(fuzz)
-        skor_m  = defuzzifikasi_centroid(agregat)
-        al_s, zs_s = inferensi_sugeno(fuzz)
-        skor_s  = defuzzifikasi_weighted_average(al_s, zs_s)
+    fuzz    = fuzzifikasi(bmi_val, bp_s, chol_s, age, veggies)
+    agregat = inferensi_mamdani(fuzz)
+    skor_m  = defuzzifikasi_centroid(agregat)
+    al_s, zs_s = inferensi_sugeno(fuzz)
+    skor_s  = defuzzifikasi_weighted_average(al_s, zs_s)
 
-        # Hybrid (jika model ada)
-        row_dict = {
-            "BMI": bmi_val, "HighBP": highbp, "HighChol": highchol,
-            "Smoker": smoker, "Stroke": stroke, "HeartDiseaseorAttack": heart_dis,
-            "PhysActivity": phys_act, "Fruits": fruits, "Veggies": veggies,
-            "HvyAlcoholConsump": heavy_alc, "GenHlth": gen_hlth,
-            "MentHlth": ment_hlth, "PhysHlth": phys_hlth, "DiffWalk": diff_walk,
-            "Sex": sex, "Age": age, "Education": education, "Income": income,
-        }
-        hasil_h = None
-        if st.session_state.dl_model is not None:
-            hasil_h = prediksi_pasien_hybrid(row_dict, st.session_state.dl_model, st.session_state.dl_scaler)
-
-        st.session_state.hasil = {
-            "hasil_f": hasil_f, "hasil_h": hasil_h,
-            "fuzz": fuzz, "agregat": agregat, "skor_m": skor_m,
-            "al_s": al_s, "zs_s": zs_s, "skor_s": skor_s,
-            "bmi_val": bmi_val, "bp_s": bp_s, "chol_s": chol_s,
-        }
-
-    if st.session_state.hasil is None:
-        st.info("👈 Atur data pasien di panel kiri, lalu klik **Prediksi**.")
-        st.stop()
-
-    d       = st.session_state.hasil
-    hasil_f = d["hasil_f"]
-    hasil_h = d["hasil_h"]
+    row_dict = {
+        "BMI": bmi_val, "HighBP": highbp, "HighChol": highchol,
+        "Smoker": smoker, "Stroke": stroke, "HeartDiseaseorAttack": heart_dis,
+        "PhysActivity": phys_act, "Fruits": fruits, "Veggies": veggies,
+        "HvyAlcoholConsump": heavy_alc, "GenHlth": gen_hlth,
+        "MentHlth": ment_hlth, "PhysHlth": phys_hlth, "DiffWalk": diff_walk,
+        "Sex": sex, "Age": age, "Education": education, "Income": income,
+    }
+    hasil_h = None
+    if st.session_state.dl_model is not None:
+        hasil_h = prediksi_pasien_hybrid(
+            row_dict,
+            st.session_state.dl_model,
+            st.session_state.dl_scaler,
+        )
 
     # ── Kartu Hasil ──────────────────────────────────────────
     st.subheader("Hasil Prediksi")
@@ -256,9 +248,7 @@ with tab_pred:
 
     # ── Derajat Keanggotaan ───────────────────────────────────
     st.subheader("Derajat Keanggotaan Input")
-    fuzz = d["fuzz"]
-
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         st.caption("**BMI**")
         for k, lbl in [("bmi_kurus","Kurus"),("bmi_normal","Normal"),
@@ -278,6 +268,28 @@ with tab_pred:
             v = fuzz[k]
             st.markdown(f"`{lbl}` &nbsp; **{v:.4f}**", unsafe_allow_html=True)
             st.progress(float(v))
+    with c4:
+        st.caption("**Umur**")
+
+        for k, lbl in [
+            ("umur_muda","Muda"),
+            ("umur_dewasa","Dewasa"),
+            ("umur_tua","Tua")
+        ]:
+            v = fuzz[k]
+            st.markdown(f"`{lbl}` **{v:.4f}**")
+            st.progress(float(v))
+
+    with c5:
+        st.caption("**Konsumsi Sayur**")
+
+        for k, lbl in [
+            ("sayur_jarang","Jarang"),
+            ("sayur_sering","Sering")
+        ]:
+            v = fuzz[k]
+            st.markdown(f"`{lbl}` **{v:.4f}**")
+            st.progress(float(v))
 
     st.divider()
 
@@ -285,11 +297,11 @@ with tab_pred:
     st.subheader("Visualisasi Inferensi")
     p1, p2 = st.columns(2)
     with p1:
-        fig = plot_mamdani(d["agregat"], d["skor_m"])
+        fig = plot_mamdani(agregat, skor_m)
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
     with p2:
-        fig2 = plot_sugeno(d["al_s"], d["zs_s"])
+        fig2 = plot_sugeno(al_s, zs_s)
         if fig2:
             st.pyplot(fig2, use_container_width=True)
             plt.close(fig2)
@@ -322,6 +334,7 @@ with tab_mf:
         st.pyplot(fig, use_container_width=True); plt.close(fig)
 
     r2c1, r2c2 = st.columns(2)
+    r3c1, r3c2 = st.columns(2)
     with r2c1:
         fig = plot_mf("Kolesterol (HighChol)", (0, 10),
                       [(mf_chol_rendah,"Rendah"),(mf_chol_sedang,"Sedang"),(mf_chol_tinggi,"Tinggi")],
@@ -331,26 +344,50 @@ with tab_mf:
     with r2c2:
         fig = plot_mf("Output — Risiko Diabetes", (0, 10),
               [(mf_tidak,"TIDAK"),(mf_mungkin,"MUNGKIN"),(mf_iya,"IYA")],
-              vline=d["skor_m"])
+              vline=skor_m)
         st.pyplot(fig, use_container_width=True); plt.close(fig)
+    with r3c1:
+        fig = plot_mf("Umur",(1, 13),[(mf_umur_muda, "Muda"),(mf_umur_dewasa, "Dewasa"),(mf_umur_tua, "Tua"),],vline=age)
+        st.pyplot(fig, use_container_width=True)
+    with r3c2:
+        fig = plot_mf("Konsumsi Sayur",(0, 1),[(mf_sayur_jarang, "Jarang"),(mf_sayur_sering, "Sering"),],vline=veggies)
+        st.pyplot(fig, use_container_width=True)        
 
     st.divider()
     st.subheader("Rule Base (20 Rules)")
 
     fn_label = {
-        "bmi_kurus":"Kurus","bmi_normal":"Normal","bmi_gemuk":"Gemuk","bmi_obesitas":"Obesitas",
-        "bp_rendah":"Rendah","bp_sedang":"Sedang","bp_tinggi":"Tinggi",
-        "chol_rendah":"Rendah","chol_sedang":"Sedang","chol_tinggi":"Tinggi",
+        "bmi_kurus":"Kurus",
+        "bmi_normal":"Normal",
+        "bmi_gemuk":"Gemuk",
+        "bmi_obesitas":"Obesitas",
+
+        "bp_rendah":"Rendah",
+        "bp_sedang":"Sedang",
+        "bp_tinggi":"Tinggi",
+
+        "chol_rendah":"Rendah",
+        "chol_sedang":"Sedang",
+        "chol_tinggi":"Tinggi",
+
+        "umur_muda":"Muda",
+        "umur_dewasa":"Dewasa",
+        "umur_tua":"Tua",
+
+        "sayur_jarang":"Jarang",
+        "sayur_sering":"Sering",
     }
     out_name = {id(mf_tidak):"TIDAK", id(mf_mungkin):"MUNGKIN", id(mf_iya):"IYA"}
 
     rows = []
-    for i, (fb, fp, fc, fo, z) in enumerate(RULES, 1):
+    for i, (fb, fp, fc, fu, fs, fo, z) in enumerate(RULES, 1):
         rows.append({
             "No": f"R{i:02d}",
             "BMI": fn_label.get(FN_MAP[fb], "?"),
             "Tekanan Darah": fn_label.get(FN_MAP[fp], "?"),
             "Kolesterol": fn_label.get(FN_MAP[fc], "?"),
+            "Umur": fn_label.get(FN_MAP[fu], "?"),
+            "Sayur": fn_label.get(FN_MAP[fs], "?"),
             "Output Mamdani": out_name.get(id(fo), "?"),
             "z Sugeno": z,
         })
@@ -412,33 +449,55 @@ with tab_dl:
             chart = st.empty()
             logs_ = []
 
-            class CB(tf.keras.callbacks.Callback):
-                def on_epoch_end(self, ep, logs=None):
-                    pct = int((ep+1) / epochs * 100)
-                    prog.progress(pct, text=f"Epoch {ep+1}/{epochs}  —  loss: {logs.get('loss',0):.4f}  |  val_auc: {logs.get('val_auc',0):.4f}")
-                    logs_.append({"loss": logs.get("loss"), "val_loss": logs.get("val_loss"),
-                                  "val_auc": logs.get("val_auc")})
-                    if len(logs_) > 1:
-                        chart.line_chart(pd.DataFrame(logs_), y=["loss","val_loss"])
-
-            data  = df_up[DL_FEATURES + ["Diabetes_012"]].dropna()
-            X     = data[DL_FEATURES].values
-            y     = data["Diabetes_012"].astype(int).values
-            sc    = StandardScaler()
-            X_sc  = sc.fit_transform(X)
-            X_tr, X_te, y_tr, y_te = train_test_split(X_sc, y, test_size=0.2,
-                                                        random_state=42, stratify=y)
-            cw = {0: 1.0, 1: float(np.sum(y_tr==0)/np.sum(y_tr==1))}
-
-            model = build_dl_model(X_tr.shape[1])
-            model.fit(X_tr, y_tr, validation_data=(X_te, y_te),
-                      epochs=epochs, batch_size=batch,
-                      class_weight=cw, callbacks=[CB()], verbose=0)
+            (
+                model,
+                sc,
+                history,
+                accuracy,
+                precision,
+                recall,
+                f1,
+                auc,
+                cm
+            ) = train_deep_learning(
+                df_up,
+                epochs=epochs,
+                batch_size=batch
+            )
 
             st.session_state.dl_model  = model
             st.session_state.dl_scaler = sc
             simpan_model_dl(model, sc)
             st.success("✅ Training selesai! Model disimpan dan Ensemble aktif.")
+            
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric("Accuracy", f"{accuracy*100:.2f}%")
+                st.metric("Precision", f"{precision*100:.2f}%")
+
+            with col2:
+                st.metric("Recall", f"{recall*100:.2f}%")
+                st.metric("F1 Score", f"{f1*100:.2f}%")
+
+            with col3:
+                st.metric("ROC-AUC", f"{auc:.4f}")
+                
+                st.write("### Confusion Matrix")
+
+                cm_df = pd.DataFrame(
+                    cm,
+                    index=[
+                        "Aktual Tidak Diabetes",
+                        "Aktual Diabetes"
+                    ],
+                    columns=[
+                        "Prediksi Tidak Diabetes",
+                        "Prediksi Diabetes"
+                    ]
+                )
+
+            st.dataframe(cm_df, use_container_width=True)
 
     st.divider()
     st.subheader("Arsitektur & Formula Ensemble")
@@ -496,9 +555,25 @@ with tab_eval:
             bar = st.progress(0)
             total = len(sample)
             for idx, (_, row) in enumerate(sample.iterrows()):
-                _, _, bm = prediksi_mamdani(row["BMI"], row["HighBP_scaled"], row["HighChol_scaled"])
-                _, _, bs = prediksi_sugeno(row["BMI"], row["HighBP_scaled"], row["HighChol_scaled"])
-                pred_m.append(bm); pred_s.append(bs)
+
+                _, _, bm = prediksi_mamdani(
+                    row["BMI"],
+                    row["HighBP_scaled"],
+                    row["HighChol_scaled"],
+                    row["Age"],
+                    row["Veggies"]
+                )
+
+                _, _, bs = prediksi_sugeno(
+                    row["BMI"],
+                    row["HighBP_scaled"],
+                    row["HighChol_scaled"],
+                    row["Age"],
+                    row["Veggies"]
+                )
+
+                pred_m.append(bm)
+                pred_s.append(bs)
                 if idx % 200 == 0:
                     bar.progress(min(idx/total, 1.0))
             bar.progress(1.0)
@@ -592,19 +667,37 @@ with tab_info:
     st.divider()
     st.markdown("#### 20 Rule Base")
     fn_lbl = {
-        "bmi_kurus":"Kurus","bmi_normal":"Normal","bmi_gemuk":"Gemuk","bmi_obesitas":"Obesitas",
-        "bp_rendah":"Rendah","bp_sedang":"Sedang","bp_tinggi":"Tinggi",
-        "chol_rendah":"Rendah","chol_sedang":"Sedang","chol_tinggi":"Tinggi",
+        "bmi_kurus":"Kurus",
+        "bmi_normal":"Normal",
+        "bmi_gemuk":"Gemuk",
+        "bmi_obesitas":"Obesitas",
+
+        "bp_rendah":"Rendah",
+        "bp_sedang":"Sedang",
+        "bp_tinggi":"Tinggi",
+
+        "chol_rendah":"Rendah",
+        "chol_sedang":"Sedang",
+        "chol_tinggi":"Tinggi",
+
+        "umur_muda":"Muda",
+        "umur_dewasa":"Dewasa",
+        "umur_tua":"Tua",
+
+        "sayur_jarang":"Jarang",
+        "sayur_sering":"Sering",
     }
     out_nm = {id(mf_tidak):"TIDAK", id(mf_mungkin):"MUNGKIN", id(mf_iya):"IYA"}
     rows_info = []
-    for i, (fb, fp, fc, fo, z) in enumerate(RULES, 1):
+    for i, (fb, fp, fc, fu, fs, fo, z) in enumerate(RULES, 1):
         rows_info.append({
             "No": f"R{i:02d}",
-            "JIKA BMI": fn_lbl.get(FN_MAP[fb],"?"),
-            "DAN BP": fn_lbl.get(FN_MAP[fp],"?"),
-            "DAN Kolesterol": fn_lbl.get(FN_MAP[fc],"?"),
-            "MAKA": out_nm.get(id(fo),"?"),
+            "JIKA BMI": fn_lbl.get(FN_MAP[fb], "?"),
+            "DAN BP": fn_lbl.get(FN_MAP[fp], "?"),
+            "DAN Kolesterol": fn_lbl.get(FN_MAP[fc], "?"),
+            "DAN Umur": fn_lbl.get(FN_MAP[fu], "?"),
+            "DAN Sayur": fn_lbl.get(FN_MAP[fs], "?"),
+            "MAKA": out_nm.get(id(fo), "?"),
             "z": z,
         })
     st.dataframe(pd.DataFrame(rows_info), hide_index=True, use_container_width=True)

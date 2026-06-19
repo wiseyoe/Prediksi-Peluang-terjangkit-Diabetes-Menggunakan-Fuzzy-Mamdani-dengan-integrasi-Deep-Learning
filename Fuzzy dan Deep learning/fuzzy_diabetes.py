@@ -33,7 +33,15 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    confusion_matrix,
+    classification_report
+)
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
@@ -92,33 +100,928 @@ def mf_tidak(x):   return trapmf(x, 0, 0, 2, 4)
 def mf_mungkin(x): return trimf(x,  3, 5, 7)
 def mf_iya(x):     return trapmf(x, 6, 8, 10, 10)
 
+def mf_umur_muda(x):
+    return trapmf(x,1,1,4,7)
+
+def mf_umur_dewasa(x):
+    return trimf(x,4,7,10)
+def mf_umur_tua(x): return trapmf(x, 8, 11, 13, 13)
+
+def mf_sayur_jarang(x):
+    x = np.asarray(x)
+    return (x == 0).astype(float)
+
+def mf_sayur_sering(x):
+    x = np.asarray(x)
+    return (x == 1).astype(float)
+
 
 # =============================================================
 #  BAGIAN 3 — RULE BASE (20 Rules)  [TIDAK DIUBAH]
 # =============================================================
 
 RULES = [
-    (mf_bmi_normal,   mf_bp_rendah, mf_chol_rendah, mf_tidak,   2.0),
-    (mf_bmi_kurus,    mf_bp_rendah, mf_chol_rendah, mf_tidak,   2.0),
-    (mf_bmi_normal,   mf_bp_rendah, mf_chol_sedang, mf_tidak,   2.5),
-    (mf_bmi_kurus,    mf_bp_sedang, mf_chol_rendah, mf_tidak,   2.0),
-    (mf_bmi_normal,   mf_bp_sedang, mf_chol_rendah, mf_tidak,   2.5),
-    (mf_bmi_gemuk,    mf_bp_rendah, mf_chol_rendah, mf_mungkin, 5.0),
-    (mf_bmi_normal,   mf_bp_tinggi, mf_chol_sedang, mf_mungkin, 5.0),
-    (mf_bmi_gemuk,    mf_bp_sedang, mf_chol_sedang, mf_mungkin, 5.0),
-    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_rendah, mf_mungkin, 5.0),
-    (mf_bmi_normal,   mf_bp_sedang, mf_chol_sedang, mf_mungkin, 4.5),
-    (mf_bmi_gemuk,    mf_bp_rendah, mf_chol_sedang, mf_mungkin, 5.0),
-    (mf_bmi_kurus,    mf_bp_tinggi, mf_chol_sedang, mf_mungkin, 4.5),
-    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi, mf_iya,     8.5),
-    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_sedang, mf_iya,     8.5),
-    (mf_bmi_gemuk,    mf_bp_tinggi, mf_chol_tinggi, mf_iya,     8.0),
-    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_tinggi, mf_iya,     8.0),
-    (mf_bmi_gemuk,    mf_bp_tinggi, mf_chol_sedang, mf_iya,     7.5),
-    (mf_bmi_normal,   mf_bp_tinggi, mf_chol_tinggi, mf_iya,     7.0),
-    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_tinggi, mf_iya,     7.5),
-    (mf_bmi_gemuk,    mf_bp_sedang, mf_chol_tinggi, mf_iya,     7.5),
+    # ==========================================================
+    # ── TIDAK — 20 Rules (Risiko Rendah, skor 1.5–3.5) ───────
+    # ==========================================================
+
+    # R01: Kurus, BP rendah, Chol rendah, Muda, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 1.5),
+
+    # R02: Normal, BP rendah, Chol rendah, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 2.0),
+
+    # R03: Kurus, BP rendah, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 2.0),
+
+    # R04: Normal, BP rendah, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 2.0),
+
+    # R05: Normal, BP rendah, Chol rendah, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 2.5),
+
+    # R06: Normal, BP rendah, Chol sedang, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 2.5),
+
+    # R07: Normal, BP sedang, Chol rendah, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 2.5),
+
+    # R08: Kurus, BP sedang, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 2.5),
+
+    # R09: Kurus, BP rendah, Chol sedang, Muda, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 2.5),
+
+    # R10: Kurus, BP rendah, Chol rendah, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 2.5),
+
+    # R11: Normal, BP rendah, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.0),
+
+    # R12: Normal, BP sedang, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.0),
+
+    # R13: Kurus, BP sedang, Chol sedang, Muda, Sering sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.0),
+
+    # R14: Kurus, BP rendah, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.0),
+
+    # R15: Kurus, BP sedang, Chol rendah, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.0),
+
+    # R16: Normal, BP rendah, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.0),
+
+    # R17: Kurus, BP rendah, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.0),
+
+    # R18: Normal, BP sedang, Chol sedang, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.0),
+
+    # R19: Kurus, BP sedang, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.5),
+
+    # R20: Normal, BP rendah, Chol sedang, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.5),
+
+    # ==========================================================
+    # ── MUNGKIN — 20 Rules (Risiko Sedang, skor 4.0–6.4) ─────
+    # ==========================================================
+
+    # R21: Gemuk, BP rendah, Chol rendah, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 4.0),
+
+    # R22: Normal, BP sedang, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 4.0),
+
+    # R23: Gemuk, BP rendah, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 4.0),
+
+    # R24: Normal, BP tinggi, Chol rendah, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 4.0),
+
+    # R25: Gemuk, BP sedang, Chol rendah, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 4.5),
+
+    # R26: Gemuk, BP rendah, Chol sedang, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 4.5),
+
+    # R27: Gemuk, BP sedang, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 4.5),
+
+    # R28: Normal, BP sedang, Chol sedang, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 4.5),
+
+    # R29: Normal, BP tinggi, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 5.0),
+
+    # R30: Gemuk, BP rendah, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 5.0),
+
+    # R31: Gemuk, BP sedang, Chol sedang, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 5.0),
+
+    # R32: Obesitas, BP rendah, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 5.0),
+
+    # R33: Gemuk, BP sedang, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 5.0),
+
+    # R34: Normal, BP tinggi, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R35: Gemuk, BP tinggi, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R36: Gemuk, BP sedang, Chol sedang, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R37: Obesitas, BP rendah, Chol rendah, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R38: Obesitas, BP rendah, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R39: Gemuk, BP tinggi, Chol rendah, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 6.0),
+
+    # R40: Obesitas, BP sedang, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 6.0),
+
+    # ==========================================================
+    # ── IYA — 20 Rules (Risiko Tinggi, skor 6.5–9.5) ─────────
+    # ==========================================================
+
+    # R41: Gemuk, BP tinggi, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 7.0),
+
+    # R42: Obesitas, BP sedang, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 7.0),
+
+    # R43: Gemuk, BP tinggi, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 7.5),
+
+    # R44: Obesitas, BP rendah, Chol tinggi, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 7.5),
+
+    # R45: Obesitas, BP tinggi, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 7.5),
+
+    # R46: Gemuk, BP tinggi, Chol sedang, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 7.5),
+
+    # R47: Obesitas, BP sedang, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 7.5),
+
+    # R48: Gemuk, BP tinggi, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 8.0),
+
+    # R49: Obesitas, BP tinggi, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 8.0),
+
+    # R50: Gemuk, BP tinggi, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 8.0),
+
+    # R51: Obesitas, BP sedang, Chol tinggi, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 8.0),
+
+    # R52: Obesitas, BP tinggi, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 8.5),
+
+    # R53: Gemuk, BP tinggi, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 8.5),
+
+    # R54: Obesitas, BP sedang, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 8.5),
+
+    # R55: Obesitas, BP tinggi, Chol sedang, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 8.5),
+
+    # R56: Obesitas, BP tinggi, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 8.5),
+
+    # R57: Obesitas, BP tinggi, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 9.0),
+
+    # R58: Obesitas, BP tinggi, Chol tinggi, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 9.0),
+
+    # R59: Gemuk, BP tinggi, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 9.0),
+
+    # R60: Obesitas, BP tinggi, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 9.5),
+
+    # ==========================================================
+    # ── TIDAK TAMBAHAN — R61–R90 (Risiko Rendah, skor 1.5–3.8)
+    # ==========================================================
+
+    # R61: Kurus, BP rendah, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 2.8),
+
+    # R62: Kurus, BP sedang, Chol sedang, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.0),
+
+    # R63: Normal, BP sedang, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_tidak, 3.2),
+
+    # R64: Kurus, BP rendah, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_tidak, 3.0),
+
+    # R65: Normal, BP rendah, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_tidak, 3.2),
+
+    # R66: Kurus, BP tinggi, Chol rendah, Muda, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.0),
+
+    # R67: Kurus, BP rendah, Chol sedang, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.0),
+
+    # R68: Normal, BP sedang, Chol rendah, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.0),
+
+    # R69: Kurus, BP sedang, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.2),
+
+    # R70: Normal, BP rendah, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.2),
+
+    # R71: Kurus, BP tinggi, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.3),
+
+    # R72: Kurus, BP rendah, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.3),
+
+    # R73: Normal, BP tinggi, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.3),
+
+    # R74: Kurus, BP sedang, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.3),
+
+    # R75: Normal, BP sedang, Chol sedang, Tua, Jarang sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_tidak, 3.5),
+
+    # R76: Kurus, BP rendah, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.2),
+
+    # R77: Normal, BP sedang, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_tidak, 3.3),
+
+    # R78: Kurus, BP tinggi, Chol sedang, Muda, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.5),
+
+    # R79: Normal, BP tinggi, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.5),
+
+    # R80: Kurus, BP sedang, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.5),
+
+    # R81: Normal, BP rendah, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_tidak, 3.5),
+
+    # R82: Kurus, BP tinggi, Chol rendah, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.5),
+
+    # R83: Normal, BP rendah, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.5),
+
+    # R84: Kurus, BP sedang, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_tidak, 3.3),
+
+    # R85: Kurus, BP tinggi, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.8),
+
+    # R86: Normal, BP sedang, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.8),
+
+    # R87: Kurus, BP rendah, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.5),
+
+    # R88: Normal, BP rendah, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.8),
+
+    # R89: Kurus, BP sedang, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.8),
+
+    # R90: Kurus, BP tinggi, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.8),
+
+    # ==========================================================
+    # ── MUNGKIN TAMBAHAN — R91–R120 (Risiko Sedang, 4.0–6.4) ─
+    # ==========================================================
+
+    # R91: Normal, BP tinggi, Chol rendah, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 4.2),
+
+    # R92: Gemuk, BP rendah, Chol rendah, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 4.2),
+
+    # R93: Gemuk, BP rendah, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 4.5),
+
+    # R94: Normal, BP tinggi, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 4.5),
+
+    # R95: Gemuk, BP rendah, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 4.5),
+
+    # R96: Normal, BP sedang, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 4.5),
+
+    # R97: Gemuk, BP sedang, Chol rendah, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 4.8),
+
+    # R98: Obesitas, BP rendah, Chol rendah, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 4.8),
+
+    # R99: Normal, BP tinggi, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 5.0),
+
+    # R100: Gemuk, BP sedang, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 5.0),
+
+    # R101: Gemuk, BP rendah, Chol sedang, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 5.0),
+
+    # R102: Obesitas, BP sedang, Chol rendah, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 5.0),
+
+    # R103: Normal, BP tinggi, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 5.2),
+
+    # R104: Gemuk, BP sedang, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 5.2),
+
+    # R105: Obesitas, BP rendah, Chol sedang, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 5.2),
+
+    # R106: Gemuk, BP rendah, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R107: Gemuk, BP sedang, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 5.5),
+
+    # R108: Obesitas, BP rendah, Chol sedang, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R109: Normal, BP tinggi, Chol sedang, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R110: Gemuk, BP tinggi, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 5.5),
+
+    # R111: Obesitas, BP sedang, Chol rendah, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 5.8),
+
+    # R112: Gemuk, BP rendah, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 5.8),
+
+    # R113: Obesitas, BP rendah, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 5.8),
+
+    # R114: Normal, BP tinggi, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 6.0),
+
+    # R115: Gemuk, BP sedang, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 6.0),
+
+    # R116: Obesitas, BP rendah, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 5.8),
+
+    # R117: Gemuk, BP tinggi, Chol sedang, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 6.0),
+
+    # R118: Obesitas, BP sedang, Chol sedang, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 6.0),
+
+    # R119: Gemuk, BP rendah, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 6.2),
+
+    # R120: Obesitas, BP sedang, Chol sedang, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_mungkin, 6.2),
+
+    # ==========================================================
+    # ── IYA TAMBAHAN — R121–R150 (Risiko Tinggi, 6.5–9.5) ────
+    # ==========================================================
+
+    # R121: Gemuk, BP tinggi, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 7.0),
+
+    # R122: Obesitas, BP tinggi, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 7.0),
+
+    # R123: Obesitas, BP sedang, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 7.0),
+
+    # R124: Gemuk, BP sedang, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 7.0),
+
+    # R125: Obesitas, BP tinggi, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 7.5),
+
+    # R126: Gemuk, BP sedang, Chol tinggi, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 7.5),
+
+    # R127: Obesitas, BP rendah, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 7.5),
+
+    # R128: Gemuk, BP tinggi, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 7.5),
+
+    # R129: Obesitas, BP sedang, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 7.5),
+
+    # R130: Gemuk, BP sedang, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 7.5),
+
+    # R131: Obesitas, BP tinggi, Chol rendah, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 8.0),
+
+    # R132: Gemuk, BP tinggi, Chol tinggi, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 8.0),
+
+    # R133: Obesitas, BP sedang, Chol sedang, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 8.0),
+
+    # R134: Gemuk, BP sedang, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 8.0),
+
+    # R135: Obesitas, BP rendah, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 8.0),
+
+    # R136: Gemuk, BP tinggi, Chol sedang, Tua, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 8.0),
+
+    # R137: Obesitas, BP tinggi, Chol rendah, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 8.0),
+
+    # R138: Obesitas, BP sedang, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 8.0),
+
+    # R139: Gemuk, BP tinggi, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 8.5),
+
+    # R140: Obesitas, BP tinggi, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 8.5),
+
+    # R141: Obesitas, BP rendah, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 8.5),
+
+    # R142: Gemuk, BP tinggi, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 8.5),
+
+    # R143: Obesitas, BP tinggi, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 8.5),
+
+    # R144: Gemuk, BP sedang, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 8.5),
+
+    # R145: Obesitas, BP tinggi, Chol sedang, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 8.5),
+
+    # R146: Obesitas, BP tinggi, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 9.0),
+
+    # R147: Gemuk, BP tinggi, Chol tinggi, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 9.0),
+
+    # R148: Obesitas, BP tinggi, Chol sedang, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 9.0),
+
+    # R149: Obesitas, BP sedang, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 9.0),
+
+    # R150: Obesitas, BP tinggi, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 9.5),
+
+    # ==========================================================
+    # ── TIDAK TAMBAHAN — R151–R172 (Risiko Rendah, skor 1.5–3.9)
+    # ==========================================================
+
+    # R151: Kurus, BP tinggi, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.5),
+
+    # R152: Normal, BP tinggi, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_tidak, 3.6),
+
+    # R153: Kurus, BP sedang, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.7),
+
+    # R154: Normal, BP sedang, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.8),
+
+    # R155: Kurus, BP tinggi, Chol sedang, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.8),
+
+    # R156: Normal, BP tinggi, Chol sedang, Muda, Sering sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_tidak, 3.8),
+
+    # R157: Kurus, BP rendah, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.5),
+
+    # R158: Normal, BP rendah, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.7),
+
+    # R159: Kurus, BP tinggi, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_tidak, 3.9),
+
+    # R160: Normal, BP sedang, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.9),
+
+    # R161: Kurus, BP rendah, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_tidak, 3.3),
+
+    # R162: Normal, BP rendah, Chol sedang, Tua, Jarang sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_tidak, 3.5),
+
+    # R163: Kurus, BP sedang, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_tidak, 3.3),
+
+    # R164: Normal, BP sedang, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_tidak, 3.5),
+
+    # R165: Kurus, BP tinggi, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_tidak, 3.6),
+
+    # R166: Kurus, BP rendah, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_tidak, 3.2),
+
+    # R167: Normal, BP tinggi, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.8),
+
+    # R168: Kurus, BP sedang, Chol sedang, Tua, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_tidak, 3.6),
+
+    # R169: Normal, BP rendah, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_normal,  mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.7),
+
+    # R170: Kurus, BP tinggi, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.7),
+
+    # R171: Normal, BP tinggi, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_tidak, 3.9),
+
+    # R172: Kurus, BP tinggi, Chol tinggi, Tua, Sering sayur
+    (mf_bmi_kurus,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_tidak, 3.9),
+
+    # ==========================================================
+    # ── MUNGKIN TAMBAHAN — R173–R194 (Risiko Sedang, 4.0–6.4) ─
+    # ==========================================================
+
+    # R173: Gemuk, BP rendah, Chol rendah, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 4.5),
+
+    # R174: Normal, BP tinggi, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_mungkin, 4.8),
+
+    # R175: Gemuk, BP rendah, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_mungkin, 4.8),
+
+    # R176: Obesitas, BP rendah, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 5.0),
+
+    # R177: Normal, BP sedang, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_normal,  mf_bp_sedang, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 5.0),
+
+    # R178: Gemuk, BP sedang, Chol sedang, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_mungkin, 5.2),
+
+    # R179: Normal, BP tinggi, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 5.5),
+
+    # R180: Gemuk, BP rendah, Chol sedang, Muda, Jarang sayur (sudah ada yg mirip, beda umur)
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_mungkin, 5.5),
+
+    # R181: Obesitas, BP rendah, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_mungkin, 5.5),
+
+    # R182: Normal, BP tinggi, Chol tinggi, Dewasa, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 5.8),
+
+    # R183: Gemuk, BP tinggi, Chol rendah, Muda, Sering sayur (tercover sebelumnya tapi beda kombinasi)
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 5.5),
+
+    # R184: Obesitas, BP sedang, Chol rendah, Muda, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 5.5),
+
+    # R185: Normal, BP tinggi, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_normal,  mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_mungkin, 6.0),
+
+    # R186: Gemuk, BP tinggi, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 6.0),
+
+    # R187: Obesitas, BP sedang, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 6.0),
+
+    # R188: Gemuk, BP rendah, Chol tinggi, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_mungkin, 6.0),
+
+    # R189: Obesitas, BP rendah, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 6.0),
+
+    # R190: Gemuk, BP tinggi, Chol tinggi, Muda, Sering sayur (kondisi sedang-tinggi batas)
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_mungkin, 6.2),
+
+    # R191: Obesitas, BP tinggi, Chol rendah, Muda, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_muda,   mf_sayur_sering, mf_mungkin, 6.2),
+
+    # R192: Gemuk, BP rendah, Chol tinggi, Dewasa, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_mungkin, 6.2),
+
+    # R193: Obesitas, BP sedang, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_mungkin, 6.2),
+
+    # R194: Gemuk, BP tinggi, Chol rendah, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_jarang, mf_mungkin, 6.4),
+
+    # ==========================================================
+    # ── IYA TAMBAHAN — R195–R216 (Risiko Tinggi, 6.5–9.5) ────
+    # ==========================================================
+
+    # R195: Gemuk, BP sedang, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 7.0),
+
+    # R196: Obesitas, BP sedang, Chol sedang, Muda, Sering sayur (batas atas mungkin→iya)
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 7.0),
+
+    # R197: Gemuk, BP tinggi, Chol rendah, Muda, Sering sayur (batas atas mungkin)
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 7.5),
+
+    # R198: Obesitas, BP rendah, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 7.5),
+
+    # R199: Gemuk, BP sedang, Chol sedang, Muda, Jarang sayur (konfirmasi risiko)
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 7.5),
+
+    # R200: Obesitas, BP sedang, Chol tinggi, Tua, Sering sayur (duplikat R149 disingkirkan)
+    (mf_bmi_obesitas, mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 7.5),
+
+    # R201: Gemuk, BP tinggi, Chol sedang, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_dewasa, mf_sayur_sering, mf_iya, 8.0),
+
+    # R202: Obesitas, BP tinggi, Chol sedang, Dewasa, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 7.8),
+
+    # R203: Gemuk, BP rendah, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_rendah, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 8.0),
+
+    # R204: Obesitas, BP tinggi, Chol rendah, Tua, Sering sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_rendah,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 8.0),
+
+    # R205: Gemuk, BP sedang, Chol tinggi, Muda, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 8.0),
+
+    # R206: Obesitas, BP sedang, Chol tinggi, Muda, Jarang sayur (berat)
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 9.0),
+
+    # R207: Gemuk, BP tinggi, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 9.0),
+
+    # R208: Obesitas, BP tinggi, Chol sedang, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 9.0),
+
+    # R209: Gemuk, BP tinggi, Chol sedang, Muda, Jarang sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_sedang,
+     mf_umur_muda,   mf_sayur_jarang, mf_iya, 8.5),
+
+    # R210: Obesitas, BP sedang, Chol tinggi, Tua, Jarang sayur
+    (mf_bmi_obesitas, mf_bp_sedang, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 8.0),
+
+    # R211: Gemuk, BP sedang, Chol tinggi, Dewasa, Sering sayur
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_sering, mf_iya, 9.0),
+
+    # R212: Obesitas, BP tinggi, Chol tinggi, Dewasa, Jarang sayur (very high)
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 9.5),
+
+    # R213: Gemuk, BP tinggi, Chol tinggi, Dewasa, Sering sayur (sering tapi risiko tetap tinggi)
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 9.5),
+
+    # R214: Obesitas, BP tinggi, Chol tinggi, Muda, Sering sayur (extreme)
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_muda,   mf_sayur_sering, mf_iya, 8.8),
+
+    # R215: Obesitas, BP tinggi, Chol tinggi, Tua, Jarang sayur (worst case)
+    (mf_bmi_obesitas, mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_tua,    mf_sayur_jarang, mf_iya, 9.5),
+
+    # R216: Gemuk, BP tinggi, Chol tinggi, Tua, Jarang sayur (very high risk)
+    (mf_bmi_gemuk,   mf_bp_tinggi, mf_chol_tinggi,
+     mf_umur_dewasa, mf_sayur_jarang, mf_iya, 9.0),
 ]
+
 
 
 # =============================================================
@@ -133,11 +1036,12 @@ def preprocess(df):
 
 
 def scale_bp(highbp_binary):
-    return 7.5 if highbp_binary == 1 else 2.5
-
+    # 0 → 2 (zona rendah), 1 → 9 (zona tinggi, µ tinggi=1.0)
+    return 2 if highbp_binary == 0 else 9
 
 def scale_chol(highchol_binary):
-    return 7.5 if highchol_binary == 1 else 2.5
+    # 0 → 2 (zona rendah), 1 → 9 (zona tinggi, µ tinggi=1.0)
+    return 2 if highchol_binary == 0 else 9
 
 
 # =============================================================
@@ -145,34 +1049,74 @@ def scale_chol(highchol_binary):
 # =============================================================
 
 FN_MAP = {
+    # BMI
     mf_bmi_kurus:    'bmi_kurus',
     mf_bmi_normal:   'bmi_normal',
     mf_bmi_gemuk:    'bmi_gemuk',
     mf_bmi_obesitas: 'bmi_obesitas',
+
+    # Blood Pressure
     mf_bp_rendah:    'bp_rendah',
     mf_bp_sedang:    'bp_sedang',
     mf_bp_tinggi:    'bp_tinggi',
+
+    # Cholesterol
     mf_chol_rendah:  'chol_rendah',
     mf_chol_sedang:  'chol_sedang',
     mf_chol_tinggi:  'chol_tinggi',
+
+    # Age
+    mf_umur_muda:    'umur_muda',
+    mf_umur_dewasa:  'umur_dewasa',
+    mf_umur_tua:     'umur_tua',
+
+    # Veggies
+    mf_sayur_jarang: 'sayur_jarang',
+    mf_sayur_sering: 'sayur_sering',
 }
 
 
-def fuzzifikasi(bmi, bp_scaled, chol_scaled):
+def fuzzifikasi(
+    bmi,
+    bp_scaled,
+    chol_scaled,
+    age,
+    veggies
+):
     def mu(fn, val):
-        return float(fn(np.array([val]))[0])
+        result = fn(np.array([val]))[0]
+
+        if isinstance(result, tuple):
+            result = result[0]
+
+        return float(result)
 
     return {
-        'bmi_kurus':    mu(mf_bmi_kurus,    bmi),
-        'bmi_normal':   mu(mf_bmi_normal,   bmi),
-        'bmi_gemuk':    mu(mf_bmi_gemuk,    bmi),
+
+        # BMI
+        'bmi_kurus':    mu(mf_bmi_kurus, bmi),
+        'bmi_normal':   mu(mf_bmi_normal, bmi),
+        'bmi_gemuk':    mu(mf_bmi_gemuk, bmi),
         'bmi_obesitas': mu(mf_bmi_obesitas, bmi),
-        'bp_rendah':    mu(mf_bp_rendah,    bp_scaled),
-        'bp_sedang':    mu(mf_bp_sedang,    bp_scaled),
-        'bp_tinggi':    mu(mf_bp_tinggi,    bp_scaled),
-        'chol_rendah':  mu(mf_chol_rendah,  chol_scaled),
-        'chol_sedang':  mu(mf_chol_sedang,  chol_scaled),
-        'chol_tinggi':  mu(mf_chol_tinggi,  chol_scaled),
+
+        # Blood Pressure
+        'bp_rendah':    mu(mf_bp_rendah, bp_scaled),
+        'bp_sedang':    mu(mf_bp_sedang, bp_scaled),
+        'bp_tinggi':    mu(mf_bp_tinggi, bp_scaled),
+
+        # Cholesterol
+        'chol_rendah':  mu(mf_chol_rendah, chol_scaled),
+        'chol_sedang':  mu(mf_chol_sedang, chol_scaled),
+        'chol_tinggi':  mu(mf_chol_tinggi, chol_scaled),
+
+        # Age
+        'umur_muda':    mu(mf_umur_muda, age),
+        'umur_dewasa':  mu(mf_umur_dewasa, age),
+        'umur_tua':     mu(mf_umur_tua, age),
+
+        # Veggies
+        'sayur_jarang': mu(mf_sayur_jarang, veggies),
+        'sayur_sering': mu(mf_sayur_sering, veggies),
     }
 
 
@@ -185,16 +1129,31 @@ X_OUTPUT = np.linspace(0, 10, 1000)
 
 def inferensi_mamdani(fuzz):
     agregat = np.zeros(len(X_OUTPUT))
+
     for rule in RULES:
-        fn_bmi, fn_bp, fn_chol, fn_out, _ = rule
+
+        (
+            fn_bmi,
+            fn_bp,
+            fn_chol,
+            fn_umur,
+            fn_sayur,
+            fn_out,
+            _
+        ) = rule
+
         alpha = min(
             fuzz[FN_MAP[fn_bmi]],
             fuzz[FN_MAP[fn_bp]],
             fuzz[FN_MAP[fn_chol]],
+            fuzz[FN_MAP[fn_umur]],
+            fuzz[FN_MAP[fn_sayur]]
         )
+
         if alpha > 0:
             konsekuen = np.minimum(alpha, fn_out(X_OUTPUT))
-            agregat   = np.maximum(agregat, konsekuen)
+            agregat = np.maximum(agregat, konsekuen)
+
     return agregat
 
 
@@ -205,8 +1164,14 @@ def defuzzifikasi_centroid(agregat):
     return float(np.sum(X_OUTPUT * agregat) / denom)
 
 
-def prediksi_mamdani(bmi, bp_scaled, chol_scaled):
-    fuzz    = fuzzifikasi(bmi, bp_scaled, chol_scaled)
+def prediksi_mamdani(bmi, bp_scaled, chol_scaled,age,veggies):
+    fuzz    = fuzzifikasi(
+    bmi,
+    bp_scaled,
+    chol_scaled,
+    age,
+    veggies
+)
     agregat = inferensi_mamdani(fuzz)
     skor    = defuzzifikasi_centroid(agregat)
     label, biner = skor_ke_label(skor)
@@ -218,16 +1183,31 @@ def prediksi_mamdani(bmi, bp_scaled, chol_scaled):
 # =============================================================
 
 def inferensi_sugeno(fuzz):
-    alphas, zs = [], []
+    alphas = []
+    zs = []
+
     for rule in RULES:
-        fn_bmi, fn_bp, fn_chol, _, z_out = rule
-        alpha = min(
+
+        (
+            fn_bmi,
+            fn_bp,
+            fn_chol,
+            fn_umur,
+            fn_sayur,
+            _,
+            z_out
+        ) = rule
+        alpha = float(min([
             fuzz[FN_MAP[fn_bmi]],
             fuzz[FN_MAP[fn_bp]],
             fuzz[FN_MAP[fn_chol]],
-        )
+            fuzz[FN_MAP[fn_umur]],
+            fuzz[FN_MAP[fn_sayur]]
+        ]))
+        
         alphas.append(alpha)
         zs.append(z_out)
+
     return alphas, zs
 
 
@@ -238,8 +1218,14 @@ def defuzzifikasi_weighted_average(alphas, zs):
     return float(sum(a * z for a, z in zip(alphas, zs)) / total)
 
 
-def prediksi_sugeno(bmi, bp_scaled, chol_scaled):
-    fuzz         = fuzzifikasi(bmi, bp_scaled, chol_scaled)
+def prediksi_sugeno(bmi, bp_scaled, chol_scaled, age, veggies):
+    fuzz         =fuzzifikasi(
+    bmi,
+    bp_scaled,
+    chol_scaled,
+    age,
+    veggies
+)
     alphas, zs   = inferensi_sugeno(fuzz)
     skor         = defuzzifikasi_weighted_average(alphas, zs)
     label, biner = skor_ke_label(skor)
@@ -314,8 +1300,13 @@ def train_deep_learning(df: pd.DataFrame, epochs: int = 20, batch_size: int = 64
     """
     data = df[DL_FEATURES + ['Diabetes_012']].dropna()
 
+    data['Diabetes_012'] = (
+        data['Diabetes_012'] > 0
+    ).astype(int)
+
     X = data[DL_FEATURES].values
-    y = data['Diabetes_012'].astype(int).values
+    y = data['Diabetes_012'].values
+    
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
@@ -349,15 +1340,50 @@ def train_deep_learning(df: pd.DataFrame, epochs: int = 20, batch_size: int = 64
         verbose=1
     )
 
-    # Evaluasi
+   # Evaluasi
     y_pred_prob = model.predict(X_test, verbose=0).flatten()
     y_pred = (y_pred_prob >= 0.5).astype(int)
-    print(f"\n  DL Test Accuracy: {accuracy_score(y_test, y_pred)*100:.2f}%")
-    print(classification_report(y_test, y_pred,
-                                target_names=['Tidak Diabetes', 'Diabetes']))
 
-    return model, scaler, history
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    auc = roc_auc_score(y_test, y_pred_prob)
 
+    cm = confusion_matrix(y_test, y_pred)
+
+    print("\n===== HASIL EVALUASI DEEP LEARNING =====")
+    print(f"Accuracy  : {accuracy*100:.2f}%")
+    print(f"Precision : {precision*100:.2f}%")
+    print(f"Recall    : {recall*100:.2f}%")
+    print(f"F1 Score  : {f1*100:.2f}%")
+    print(f"ROC-AUC   : {auc:.4f}")
+
+    print("\nConfusion Matrix:")
+    print(cm)
+
+    print("\nClassification Report:")
+    print(
+        classification_report(
+            y_test,
+            y_pred,
+            target_names=[
+                'Tidak Diabetes',
+                'Diabetes'
+            ]
+        )
+    )
+    return (
+        model,
+        scaler,
+        history,
+        accuracy,
+        precision,
+        recall,
+        f1,
+        auc,
+        cm
+    )
 
 def simpan_model_dl(model, scaler, path_dir='saved_model'):
     """Simpan model DL dan scaler ke disk."""
@@ -403,15 +1429,15 @@ def ensemble_fusion(skor_fuzzy: float, dl_prob: float,
 #  BAGIAN 11 — PREDIKSI SATU PASIEN  [DIPERBAIKI]
 # =============================================================
 
-def prediksi_pasien(bmi, highbp, highchol):
+def prediksi_pasien(bmi, highbp, highchol, age, veggies):
     """
     Prediksi HANYA menggunakan Fuzzy (tanpa DL).
     Tetap tersedia untuk kompatibilitas.
     """
     bp_scaled   = scale_bp(highbp)
     chol_scaled = scale_chol(highchol)
-    skor_m, label_m, biner_m = prediksi_mamdani(bmi, bp_scaled, chol_scaled)
-    skor_s, label_s, biner_s = prediksi_sugeno(bmi, bp_scaled, chol_scaled)
+    skor_m, label_m, biner_m = prediksi_mamdani(bmi, bp_scaled, chol_scaled, age, veggies)
+    skor_s, label_s, biner_s = prediksi_sugeno(bmi, bp_scaled, chol_scaled, age, veggies)
 
     return {
         'mamdani': {'skor': round(skor_m, 4), 'label': label_m, 'biner': biner_m},
@@ -450,11 +1476,13 @@ def prediksi_pasien_hybrid(row: dict, dl_model, scaler,
 
     # ── 2. FUZZY prediction ──────────────────────────────────
     bmi         = row['BMI']
+    veggies     = row['Veggies']
+    age         = row['Age']
     bp_scaled   = scale_bp(row['HighBP'])
     chol_scaled = scale_chol(row['HighChol'])
 
-    skor_m, label_m, biner_m = prediksi_mamdani(bmi, bp_scaled, chol_scaled)
-    skor_s, label_s, biner_s = prediksi_sugeno(bmi, bp_scaled, chol_scaled)
+    skor_m, label_m, biner_m = prediksi_mamdani(bmi, bp_scaled, chol_scaled, age, veggies)
+    skor_s, label_s, biner_s = prediksi_sugeno(bmi, bp_scaled, chol_scaled, age, veggies)
 
     # Gunakan rata-rata skor Mamdani & Sugeno sebagai input fuzzy ke ensemble
     skor_fuzzy_avg = (skor_m + skor_s) / 2.0
@@ -508,13 +1536,13 @@ def jalankan_pada_dataset(csv_path, n_sampel=5000, random_state=42,
     print("Menjalankan Fuzzy Mamdani...")
     skor_m, label_m, pred_m = [], [], []
     for _, row in sample.iterrows():
-        s, l, b = prediksi_mamdani(row['BMI'], row['HighBP_scaled'], row['HighChol_scaled'])
+        s, l, b = prediksi_mamdani(row['BMI'], row['HighBP_scaled'], row['HighChol_scaled'], row['Age'], row['Veggies'])
         skor_m.append(s); label_m.append(l); pred_m.append(b)
 
     print("Menjalankan Fuzzy Sugeno...")
     skor_s, label_s, pred_s = [], [], []
     for _, row in sample.iterrows():
-        s, l, b = prediksi_sugeno(row['BMI'], row['HighBP_scaled'], row['HighChol_scaled'])
+        s, l, b = prediksi_sugeno(row['BMI'], row['HighBP_scaled'], row['HighChol_scaled'], row['Age'], row['Veggies'])
         skor_s.append(s); label_s.append(l); pred_s.append(b)
 
     sample['skor_mamdani']  = skor_m
@@ -679,64 +1707,141 @@ def plot_perbandingan(sample, y_true, pred_m, pred_s, pred_ensemble=None):
 # =============================================================
 #  MAIN
 # =============================================================
-
 if __name__ == '__main__':
-    # ── Visualisasi membership function
+
+    # ── Visualisasi membership function ──────────────────────
     plot_membership_functions()
 
-    # ── Test prediksi fuzzy saja (tanpa DL)
-    print("\n" + "="*55)
+    # ── Demo prediksi fuzzy ──────────────────────────────────
+    print("\n" + "=" * 55)
     print("  DEMO PREDIKSI FUZZY — SATU PASIEN")
-    print("="*55)
+    print("=" * 55)
+
     kasus = [
-        ("Berisiko tinggi", 35.0, 1, 1),
-        ("Normal/sehat",    22.0, 0, 0),
-        ("Borderline",      27.5, 1, 0),
+        ("Berisiko tinggi", 35.0, 1, 1, 12, 0),
+        ("Normal/sehat",    22.0, 0, 0, 3, 1),
+        ("Borderline",      27.5, 1, 0, 7, 1),
     ]
-    for nama, bmi, bp, chol in kasus:
-        hasil = prediksi_pasien(bmi, bp, chol)
-        print(f"\n  [{nama}] BMI={bmi}, HighBP={bp}, HighChol={chol}")
-        print(f"  🔵 Mamdani → Skor: {hasil['mamdani']['skor']} | {hasil['mamdani']['label']}")
-        print(f"  🟠 Sugeno  → Skor: {hasil['sugeno']['skor']}  | {hasil['sugeno']['label']}")
 
-    # ── Latih DL dan jalankan ensemble pada dataset ──────────
-    # Aktifkan blok di bawah jika file CSV sudah tersedia
+    for nama, bmi, bp, chol, age, veggies in kasus:
 
+        hasil = prediksi_pasien(
+            bmi,
+            bp,
+            chol,
+            age,
+            veggies
+        )
+
+        print(
+            f"\n[{nama}] "
+            f"BMI={bmi}, "
+            f"HighBP={bp}, "
+            f"HighChol={chol}, "
+            f"Age={age}, "
+            f"Veggies={veggies}"
+        )
+
+        print(
+            f"🔵 Mamdani → "
+            f"Skor: {hasil['mamdani']['skor']} | "
+            f"{hasil['mamdani']['label']}"
+        )
+
+        print(
+            f"🟠 Sugeno → "
+            f"Skor: {hasil['sugeno']['skor']} | "
+            f"{hasil['sugeno']['label']}"
+        )
+
+    # ── Deep Learning & Evaluasi Dataset ─────────────────────
     CSV_PATH = 'Diabetes_012_health_indicators_BRFSS2015.csv'
 
     if os.path.exists(CSV_PATH):
-        print("\n" + "="*55)
+
+        print("\n" + "=" * 55)
         print("  LATIH DEEP LEARNING MODEL")
-        print("="*55)
+        print("=" * 55)
+
         df_full = pd.read_csv(CSV_PATH)
-        dl_model, scaler, history = train_deep_learning(df_full, epochs=30)
+
+        dl_model, scaler, history = train_deep_learning(
+            df_full,
+            epochs=30
+        )
+
         plot_training_history(history)
         simpan_model_dl(dl_model, scaler)
 
-        print("\n" + "="*55)
+        print("\n" + "=" * 55)
         print("  DEMO PREDIKSI HYBRID — SATU PASIEN")
-        print("="*55)
-        # Contoh pasien dengan fitur lengkap (18 fitur)
-        pasien_contoh = {
-            'BMI': 35.0, 'HighBP': 1, 'HighChol': 1,
-            'Smoker': 0, 'Stroke': 0, 'HeartDiseaseorAttack': 0,
-            'PhysActivity': 0, 'Fruits': 0, 'Veggies': 0,
-            'HvyAlcoholConsump': 0, 'GenHlth': 4,
-            'MentHlth': 0, 'PhysHlth': 5, 'DiffWalk': 1,
-            'Sex': 1, 'Age': 9, 'Education': 4, 'Income': 5
-        }
-        hasil = prediksi_pasien_hybrid(pasien_contoh, dl_model, scaler)
-        print(f"\n  Input: {pasien_contoh}")
-        print(f"  🔵 Mamdani  → Skor: {hasil['mamdani']['skor']}  | {hasil['mamdani']['label']}")
-        print(f"  🟠 Sugeno   → Skor: {hasil['sugeno']['skor']}   | {hasil['sugeno']['label']}")
-        print(f"  🤖 DL Prob  → {hasil['dl_probability']:.4f}")
-        print(f"  🟢 ENSEMBLE → Skor: {hasil['ensemble']['skor']} | {hasil['ensemble']['label']}")
+        print("=" * 55)
 
-        print("\n" + "="*55)
+        pasien_contoh = {
+            'BMI': 35.0,
+            'HighBP': 1,
+            'HighChol': 1,
+            'Smoker': 0,
+            'Stroke': 0,
+            'HeartDiseaseorAttack': 0,
+            'PhysActivity': 0,
+            'Fruits': 0,
+            'Veggies': 0,
+            'HvyAlcoholConsump': 0,
+            'GenHlth': 4,
+            'MentHlth': 0,
+            'PhysHlth': 5,
+            'DiffWalk': 1,
+            'Sex': 1,
+            'Age': 9,
+            'Education': 4,
+            'Income': 5
+        }
+
+        hasil = prediksi_pasien_hybrid(
+            pasien_contoh,
+            dl_model,
+            scaler
+        )
+
+        print(f"\nInput: {pasien_contoh}")
+        print(
+            f"🔵 Mamdani  → "
+            f"Skor: {hasil['mamdani']['skor']} | "
+            f"{hasil['mamdani']['label']}"
+        )
+
+        print(
+            f"🟠 Sugeno   → "
+            f"Skor: {hasil['sugeno']['skor']} | "
+            f"{hasil['sugeno']['label']}"
+        )
+
+        print(
+            f"🤖 DL Prob → "
+            f"{hasil['dl_probability']:.4f}"
+        )
+
+        print(
+            f"🟢 Ensemble → "
+            f"Skor: {hasil['ensemble']['skor']} | "
+            f"{hasil['ensemble']['label']}"
+        )
+
+        print("\n" + "=" * 55)
         print("  EVALUASI PADA DATASET")
-        print("="*55)
-        jalankan_pada_dataset(CSV_PATH, n_sampel=5000,
-                              dl_model=dl_model, scaler=scaler)
+        print("=" * 55)
+
+        jalankan_pada_dataset(
+            CSV_PATH,
+            n_sampel=5000,
+            dl_model=dl_model,
+            scaler=scaler
+        )
+
     else:
+
         print(f"\n[INFO] File '{CSV_PATH}' tidak ditemukan.")
-        print("       Letakkan file CSV BRFSS untuk menjalankan evaluasi penuh.")
+        print("       Training Deep Learning dilewati.")
+        print("       Evaluasi dataset dilewati.")
+        print("       Fuzzy Mamdani & Sugeno tetap dapat digunakan.")
